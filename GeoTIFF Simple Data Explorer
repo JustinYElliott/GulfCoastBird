@@ -16,10 +16,28 @@ with rasterio.open(r"C:\Users\jelliott11\Downloads\Egypt_Texas_TrueColor2022-Jun
     rgb = rgb.astype(np.float32)
     rgb = rgb / np.max(rgb)
 
+    # Get the affine transformation matrix
+    transform = src.transform
+
+
+#include portion below to display axis as kilometers#
+#########################################################
+    # Calculate the extent in kilometers
+    x_min, y_max = transform * (0, 0)  # Upper-left corner in meters
+    x_max, y_min = transform * (src.width, src.height)  # Lower-right corner in meters
+
+    # Convert meters to kilometers
+    x_min_km = x_min / 1000
+    x_max_km = x_max / 1000
+    y_min_km = y_min / 1000
+    y_max_km = y_max / 1000
+##########################################################
+
+
     # Plot the RGB image
     plt.figure(figsize=(10, 10))
-    plt.imshow(rgb)
+    plt.imshow(rgb, extent=[x_min_km, x_max_km, y_min_km, y_max_km])
     plt.title('Color GeoTIFF Visualization')
-    plt.xlabel('Pixel X')
-    plt.ylabel('Pixel Y')
+    plt.xlabel('Kilometers X')
+    plt.ylabel('Kilometers Y')
     plt.show()
