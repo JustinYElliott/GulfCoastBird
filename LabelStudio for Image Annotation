@@ -1,0 +1,12 @@
+### input this code into your terminal.
+### this was intially done on a mac
+### personal computer information has been removed
+
+~ % /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+To update, run: pip3 install --upgrade pip
+~ % label-studio
+
+
+### this show open your browser to the link below ###
+
+##http://localhost:8080/##
