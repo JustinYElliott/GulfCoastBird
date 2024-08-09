@@ -1,0 +1,42 @@
+import rasterio
+from rasterio.warp import reproject, Resampling
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Open the first raster
+with rasterio.open("path_to_first_raster.tif") as src1:
+    data1 = src1.read(1)
+    profile1 = src1.profile
+
+# Open the second raster
+with rasterio.open("path_to_second_raster.tif") as src2:
+    data2 = src2.read(1)
+    profile2 = src2.profile
+
+#### If you want to include more layers (raster files) copy above code structure. ####
+
+#### Make sure that the two raster files have the same coordinate system for best performance###
+#### Code below will attempt to match and reproject incase they are not the same coordinate system ###
+
+    # Reproject second raster to match the first
+    data2_reprojected = np.empty_like(data1)
+    reproject(
+        source=data2,
+        destination=data2_reprojected,
+        src_transform=src2.transform,
+        src_crs=src2.crs,
+        dst_transform=src1.transform,
+        dst_crs=src1.crs,
+        resampling=Resampling.bilinear
+    )
+
+# Now, overlay or combine the two datasets
+combined = (data1 + data2_reprojected) / 2  # Example of a simple overlay
+
+# Plot the result
+plt.figure(figsize=(10, 10))
+plt.imshow(combined, cmap='gray')
+plt.title('Overlay of Two Rasters')
+plt.xlabel('Pixel X')
+plt.ylabel('Pixel Y')
+plt.show()
