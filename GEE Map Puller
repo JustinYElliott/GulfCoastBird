@@ -1,0 +1,42 @@
+var dataset = ee.ImageCollection('USDA/NAIP/DOQQ')
+                  .filter(ee.Filter.date('2022-06-01', '2022-10-1'));
+
+//ADJUST DATE IN LINE TWO AS NECESSSARY
+//('2022-06-01', '2022-10-1') and a few other ranges selected for testing
+//'2022-06-01', '2022-10-1' selected for intial download
+
+// Define the coordinates for the bounding box around Egypt, Texas
+var coords = [
+  [-96.00548751671717, 29.346683933623986],
+  [-96.00548751671717, 29.573870528477965],
+  [-96.38760574181482, 29.573870528477965],
+  [-96.38760574181482, 29.346683933623986]
+];
+
+// Create a polygon from the coordinates
+var region = ee.Geometry.Polygon([coords]);
+
+// Filter the image collection by the region
+var trueColor = dataset.filterBounds(region).select(['R', 'G', 'B']);
+
+var trueColorVis = {
+  min: 0,
+  max: 255,
+};
+
+// Center the map around Egypt, Texas
+Map.setCenter(-96.196546629266, 29.460277231050975, 12);
+
+// Add the true color layer to the map
+Map.addLayer(trueColor, trueColorVis, 'True Color');
+
+// Export the image to Google Drive
+var exportImage = trueColor.mosaic().clip(region);
+Export.image.toDrive({
+  image: exportImage,
+  description: 'Egypt_Texas_TrueColor',
+  scale: 1, // Adjust scale as needed (e.g., 1 for 1 meter per pixel)
+  region: region,
+  fileFormat: 'GeoTIFF',
+  maxPixels: 1e13  // Adjust max pixels as needed
+});
