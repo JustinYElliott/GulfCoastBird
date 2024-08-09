@@ -1,0 +1,56 @@
+import rasterio
+from rasterio.windows import Window
+import os
+
+def split_into_tiles(input_tiff, output_dir, tile_size):
+    # Open the input GeoTIFF file
+    with rasterio.open(input_tiff) as src:
+        # Get the width and height of the image
+        width = src.width
+        height = src.height
+
+        # Calculate the number of tiles in x and y directions
+        num_tiles_x = width // tile_size + (1 if width % tile_size != 0 else 0)
+        num_tiles_y = height // tile_size + (1 if height % tile_size != 0 else 0)
+
+        # Iterate over each tile
+        for i in range(num_tiles_x):
+            for j in range(num_tiles_y):
+                # Calculate the window position
+                window = Window(i * tile_size, j * tile_size, tile_size, tile_size)
+
+                # Define the transform for the tile
+                transform = src.window_transform(window)
+
+                # Read the data for the current window
+                tile_data = src.read(window=window)
+
+                # Define the output filename
+                output_filename = os.path.join(output_dir, f'tile_{i}_{j}.tif')
+
+                # Write the tile to a new GeoTIFF file
+                with rasterio.open(
+                    output_filename,
+                    'w',
+                    driver='GTiff',
+                    height=tile_data.shape[1],
+                    width=tile_data.shape[2],
+                    count=src.count,
+                    dtype=tile_data.dtype,
+                    crs=src.crs,
+                    transform=transform,
+                ) as dst:
+                    dst.write(tile_data)
+
+# Path to the input GeoTIFF file
+input_tiff = r"C:\Users\jelliott11\Downloads\Egypt_Texas_TrueColor2022-Junetodecember-0000000000-0000000000.tif"
+
+# Output directory where the tiles will be saved
+output_dir = r"C:\Users\jelliott11\Downloads\BIRBS\Egypt_Texas_TrueColor2022-Junetodecember-0000000000-0000000000.tif"
+os.makedirs(output_dir, exist_ok=True)
+
+# Tile size (in pixels)
+tile_size = 256  # Adjust the tile size based on your model's requirements
+
+# Split the GeoTIFF into tiles
+split_into_tiles(input_tiff, output_dir, tile_size)
