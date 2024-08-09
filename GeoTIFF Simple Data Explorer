@@ -1,0 +1,25 @@
+import rasterio
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Open the GeoTIFF file
+with rasterio.open(r"C:\Users\jelliott11\Downloads\Egypt_Texas_TrueColor2022-Junetodecember-0000000000-0000000000.tif") as src:
+    # Read the three color bands (assuming the file has them)
+    r = src.read(1)  # Red band
+    g = src.read(2)  # Green band
+    b = src.read(3)  # Blue band
+
+    # Stack bands to create a 3D array
+    rgb = np.dstack((r, g, b))
+
+    # Normalize the pixel values to the range 0-1
+    rgb = rgb.astype(np.float32)
+    rgb = rgb / np.max(rgb)
+
+    # Plot the RGB image
+    plt.figure(figsize=(10, 10))
+    plt.imshow(rgb)
+    plt.title('Color GeoTIFF Visualization')
+    plt.xlabel('Pixel X')
+    plt.ylabel('Pixel Y')
+    plt.show()
