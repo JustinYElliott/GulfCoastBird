@@ -33,6 +33,22 @@ with rasterio.open("path_to_second_raster.tif") as src2:
 # Now, overlay or combine the two datasets
 combined = (data1 + data2_reprojected) / 2  # Example of a simple overlay
 
+#include portion below to display axis as kilometers#
+#########################################################
+    # Calculate the extent in kilometers
+    x_min, y_max = transform * (0, 0)  # Upper-left corner in meters
+    x_max, y_min = transform * (src.width, src.height)  # Lower-right corner in meters
+
+    # Convert meters to kilometers
+    x_min_km = x_min / 1000
+    x_max_km = x_max / 1000
+    y_min_km = y_min / 1000
+    y_max_km = y_max / 1000
+##########################################################
+
+
+
+
 # Plot the result
 plt.figure(figsize=(10, 10))
 plt.imshow(combined, cmap='gray')
