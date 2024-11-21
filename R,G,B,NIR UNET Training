@@ -1,0 +1,201 @@
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Conv2DTranspose, concatenate, Input
+from tensorflow.keras.models import Model
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import rasterio
+from rasterio.transform import from_origin
+
+# 1. Define U-Net Model Architecture
+def unet_model(input_size=(128, 128, 4), num_classes=5):
+    """
+    Creates a U-Net model architecture for multiclass segmentation.
+    
+    Args:
+        input_size (tuple): Size of input images in (height, width, channels).
+        num_classes (int): Number of classes for segmentation.
+
+    Returns:
+        model (tf.keras.Model): Compiled U-Net model.
+    """
+    inputs = Input(input_size)
+    
+    # Encoder
+    c1 = Conv2D(16, (3, 3), activation='relu', padding='same')(inputs)
+    c1 = Conv2D(16, (3, 3), activation='relu', padding='same')(c1)
+    p1 = MaxPooling2D((2, 2))(c1)
+    
+    c2 = Conv2D(32, (3, 3), activation='relu', padding='same')(p1)
+    c2 = Conv2D(32, (3, 3), activation='relu', padding='same')(c2)
+    p2 = MaxPooling2D((2, 2))(c2)
+    
+    # Bottleneck
+    c3 = Conv2D(64, (3, 3), activation='relu', padding='same')(p2)
+    c3 = Conv2D(64, (3, 3), activation='relu', padding='same')(c3)
+    
+    # Decoder
+    u1 = Conv2DTranspose(32, (2, 2), strides=(2, 2), padding='same')(c3)
+    u1 = concatenate([u1, c2])
+    c4 = Conv2D(32, (3, 3), activation='relu', padding='same')(u1)
+    c4 = Conv2D(32, (3, 3), activation='relu', padding='same')(c4)
+    
+    u2 = Conv2DTranspose(16, (2, 2), strides=(2, 2), padding='same')(c4)
+    u2 = concatenate([u2, c1])
+    c5 = Conv2D(16, (3, 3), activation='relu', padding='same')(u2)
+    c5 = Conv2D(16, (3, 3), activation='relu', padding='same')(c5)
+    
+    outputs = Conv2D(num_classes, (1, 1), activation='softmax')(c5)
+    
+    model = Model(inputs=[inputs], outputs=[outputs])
+    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+    
+    return model
+
+# 2. Data Generators for Training and Validation
+def create_data_generators(train_dir, val_dir, batch_size=8, image_size=(128, 128)):
+    """
+    Creates data generators for training and validation datasets.
+    
+    Args:
+        train_dir (str): Path to training dataset directory.
+        val_dir (str): Path to validation dataset directory.
+        batch_size (int): Number of samples per batch.
+        image_size (tuple): Size of input images.
+        
+    Returns:
+        train_gen, val_gen: ImageDataGenerator objects for training and validation.
+    """
+    data_gen_args = dict(rescale=1./255)
+    
+    train_datagen = ImageDataGenerator(**data_gen_args)
+    val_datagen = ImageDataGenerator(**data_gen_args)
+    
+    train_gen = train_datagen.flow_from_directory(
+        train_dir,
+        target_size=image_size,
+        batch_size=batch_size,
+        class_mode='sparse',  # For single-channel masks
+        color_mode='rgba',  # RGB + NIR inputs
+        shuffle=True
+    )
+    
+    val_gen = val_datagen.flow_from_directory(
+        val_dir,
+        target_size=image_size,
+        batch_size=batch_size,
+        class_mode='sparse',  # For single-channel masks
+        color_mode='rgba',  # RGB + NIR inputs
+        shuffle=False
+    )
+    
+    return train_gen, val_gen
+
+# 3. Model Training
+def train_model(model, train_gen, val_gen, epochs=10):
+    """
+    Trains the U-Net model using training and validation data.
+    
+    Args:
+        model (tf.keras.Model): U-Net model.
+        train_gen: Generator for training data.
+        val_gen: Generator for validation data.
+        epochs (int): Number of training epochs.
+        
+    Returns:
+        history: Training history for model.
+    """
+    history = model.fit(
+        train_gen,
+        validation_data=val_gen,
+        epochs=epochs
+    )
+    return history
+
+# 4. Inference and Saving Output for ArcGIS
+def predict_and_save(model, image_path, output_path, image_size=(128, 128)):
+    """
+    Apply the trained model to a new image and save the predicted mask as a GeoTIFF for ArcGIS.
+    
+    Args:
+        model: Trained U-Net model.
+        image_path: Path to the new image.
+        output_path: Where to save the predicted mask (e.g., GeoTIFF file).
+        image_size: Size to resize the input image (must match training size).
+    """
+    # Load and preprocess the image
+    test_image = load_and_preprocess_image(image_path, image_size)
+    
+    # Add batch dimension
+    test_image = np.expand_dims(test_image, axis=0)
+    
+    # Make prediction
+    predicted_mask = model.predict(test_image)
+    
+    # Convert probabilities to class labels
+    predicted_mask = np.argmax(predicted_mask, axis=-1)
+    predicted_mask = np.squeeze(predicted_mask)  # Remove batch dimension
+    
+    # Save the predicted mask as a GeoTIFF (GIS-friendly format)
+    save_as_geotiff(predicted_mask, output_path)
+
+def load_and_preprocess_image(image_path, image_size):
+    """
+    Loads and preprocesses a single image for inference.
+    
+    Args:
+        image_path (str): Path to the image file.
+        image_size (tuple): Size to resize the image to.
+        
+    Returns:
+        preprocessed_image: Loaded and resized image.
+    """
+    from tensorflow.keras.preprocessing.image import load_img, img_to_array
+    image = load_img(image_path, target_size=image_size, color_mode='rgba')
+    return img_to_array(image) / 255.0  # Normalize image
+
+def save_as_geotiff(image, output_path, transform=None, crs="EPSG:4326"):
+    """
+    Save the given image (mask) as a GeoTIFF for ArcGIS.
+    
+    Args:
+        image: 2D NumPy array (predicted mask).
+        output_path: Path to save the GeoTIFF.
+        transform: Georeferencing information (affine transform). If None, a default is used.
+        crs: Coordinate reference system (default is EPSG:4326 for WGS 84).
+    """
+    # Set a default transform if none provided
+    if transform is None:
+        transform = from_origin(0, 0, 1, 1)  # Adjust this to match your data resolution
+    
+    # Save the mask as a GeoTIFF file
+    with rasterio.open(
+        output_path,
+        'w',
+        driver='GTiff',
+        height=image.shape[0],
+        width=image.shape[1],
+        count=1,
+        dtype=image.dtype,
+        crs=crs,
+        transform=transform
+    ) as dst:
+        dst.write(image, 1)
+
+# Example Workflow
+# Define paths
+train_dir = 'path_to_train_images'
+val_dir = 'path_to_val_images'
+image_path = 'path_to_new_image_for_inference'
+output_path = 'output_mask.tif'
+
+# Create model
+model = unet_model(input_size=(128, 128, 4), num_classes=5)
+
+# Create data generators
+train_gen, val_gen = create_data_generators(train_dir, val_dir)
+
+# Train the model
+history = train_model(model, train_gen, val_gen, epochs=10)
+
+# Predict and save output for ArcGIS
+predict_and_save(model, image_path, output_path)
